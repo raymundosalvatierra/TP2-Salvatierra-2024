@@ -1,0 +1,199 @@
+%TRABAJO PRACTICO N° 2
+%Profesor: Julian Pucheta
+%Alumno: Herman Raymundo Salvatierra
+%CASO DE ESTUDIO 1
+%CASO DEL MOTOR DE CC
+%Sistema no lineal de 3 variables de estado
+%__________________________________________________________________________
+%Consigna: Ítem [1] Implementar un sistema en variables de estado que controle
+%el ángulo del motor, para consignas de 90° y –90° cambiando cada 5 segundos 
+%y que el TL es el descripto en la planilla de datos comparando el desempeño
+%con el obtenido con el PID digital del TP Nº1. Hallar el valor de integración
+%Euler adecuado.
+%Objetivo: acelerar la dinámica del controlador verificando el resultado 
+%con las curvas del archivo xlsx adjunto
+
+%NOTA:
+%Podemos aproximar la perturbacion como una onda cuadrada periodica
+%Podemos cambiar el valor del torque de 1 a 7 o a 3 o lo que quiera
+%Basta con hacer la simulacion hasta 10 segundos porq lo demas se repetirá
+%Debemos respetar el periodo del torque y la referencia de 5 seg de la consigna
+%__________________________________________________________________________
+clear all ; close all ;  clc
+%PARÁMETROS DE MI MOTOR:
+%Primero declaro mis parametros calculados en el TP1
+ %Laa=7.0274e-4  ; J=2.0628e-9  ; Ra=28.13  ; Bm=0 ; Ki=0.01162;   Km=0.0605;
+  Laa=4.9900e-04 ; J=4.1300e-06 ; Ra=20  ;    Bm=0 ; Ki=16.52  ;   Km=0.0605;
+%__________________________________________________________________________
+%Comienzo planteando las matrices de estado:
+%(En su forma canonica controlable, para calcularle el controlador)
+%Las variables de estado son: corriente - velocidad angular - tita (en ese orden)
+A = [-Ra/Laa -Km/Laa  0 ; %x1
+       Ki/J  -Bm/J    0 ; %x2
+         0      1     0 ] %x3
+     
+B = [1/Laa ; %x1   dejo B de una sola columna para poder hacer un sistema dual
+      0    ; %x2
+      0    ] %x3
+  
+C = [ 0    0    1]
+
+D = [ 0    0 ]
+%__________________________________________________________________________
+polos = eig(A) %Calculo los autovalores de la matriz A para tener sus polos
+polos(1)
+polos(2)
+polos(3)
+%Para saber el valor de integracion de Euler adecuado voy a usar la parte real 
+%del autovalor que abarque la dinamica mas rapida de mi sistema, en este caso
+%se calcula asi:
+h = (log(0.95))/real(polos(2))
+%El tamaño de integracion de Euler adecuado deberia ser al menos 10 veces menor que el
+%calculado (2.5628e-06), pero para asegurarme voy a elegir un h de:
+h = 1e-6 %elijo un tamaño de paso pequeño para asegurarme mejor resolucion en la simulacion
+%__________________________________________________________________________
+%El otro polo se emplea para calcular la dinamica más lenta del sistema y
+%asi estimar un tiempo de simulacion adecuado, pero en este caso particular, como se
+%que mi referencia conmuta cada 5 segundos, voy a definir un tiempo de
+%simulacion que me permita analizar 2 conmutaciones (una en +90° y otra en
+%-90°) por lo tanto defino un tiempo total de simulacion de TT = 10seg
+TT = 10 %Tiempo Total de la simulacion, incluye 2 conmutaciones
+%__________________________________________________________________________
+%Como en este ejercicio voy a tener referencias distintas de cero, entonces
+%debo agregar un integrador y por lo tanto plantear mis matrices ampliadas:
+% Construcción del sistema ampliado
+Aa = [A zeros(3,1);-C 0 ]
+
+Ba = [B(:,1);  0 ]  %Aca en la B ampliada omito la columna del torque porque quiero 
+                    %poder convertirlo a su forma canonica observable y ademas 
+                    %sólo busco controlar el angulo (necesitaré hacer un sistema dual)
+                    
+Ca = [C  0 ]        %A la matriz C le agrego un elemento 0 que representa al integrador
+%__________________________________________________________________________
+Ma=[Ba Aa*Ba Aa^2*Ba Aa^3*Ba ]%Matriz Controlabilidad
+%Evalúo si la matriz de controlabilidad tiene determinante distinta de cero
+det(Ma) % al ver que su determinante es distinto de cero, ya se que este sistema es controlable
+%__________________________________________________________________________
+%Voy a usar el metodo LQR para controlar de manera eficiente el esfuerzo de
+%control y la dinamica del error
+Q = diag([10  10  10  40]) %representa un peso ponderado de cada variable de estado
+R = 1                    % representa el esfuerzo de control
+KLQR=lqr(Aa,Ba,Q,R)
+  K = KLQR(1:3)
+Ki=-KLQR(4)
+%_______________________________________________________
+%Preparo los vectores y variables para hacer mi simulacion:
+np = TT/h % numero de pasos para crear mi simulacion
+          %Previamente elegi mi TT tiempo total y h tamaño de paso
+%________________________________________________________
+%Ahora construyo el sistema dual (Forma canonica observable)
+%Solo empleo las matrices orioginales (y no las ampliadas) porque en este
+%caso no estoy teniendo integrador, y por lo tanto solo tendré 3 variables
+%de estado, las originales del sistema (en este caso tendré 3 elementos)
+%Trasponiendo las matrices del sistema canonico controlable:
+Ao=A'
+Bo=C'
+Co=B'
+%__________________________________________________________________________
+%Si tengo un sistema dual, implica que si cumple con la condicion de
+%controlabilidad, tambien cumplirá con la condicion de observabilidad
+%__________________________________________________________________________
+%Luego a esta forma canonica observable (dual) le calculo su observador
+%Implemento un observador para poder ver 2 variables de estado y con ellas
+%estimar una tercera variable que no puedo medir directamente
+do = [10 10 10] % corriente - velocidad - angulo
+Qo = diag(do)
+Ro = 1         %comienzo probando con el valor mas simple posible
+Ko = (lqr(Ao,Bo,Qo,Ro))'
+%________________________________________________________________________
+%Ahora armo mi simulacion:
+% TT = 10  %Ya lo habia establecido anteriormente
+%  h = tamaño de paso
+% np = (TT/h) numero de puntos de la simulacion
+%__________________________________________________________________________
+%Implemento el efecto de la no-linealidad:
+zona_muerta = 1 %con voltaje de entrada desde -1 hasta +1 el actuador lineal no se encenderá
+                %sospecho que cuando lo aplique debo consultar su valor absoluto
+%__________________________________________________________________________
+%Formo los valores punto a punto de mi simulacion:
+t = 0 : h : np*h ;
+   wr = zeros(1 , np+1 ); % invento un vector de tamaño np+1 puntos
+theta = zeros(1 , np+1 ); % invento un vector de tamaño np+1 puntos
+   Ia = zeros(1 , np+1 ); % invento un vector de tamaño np+1 puntos
+    u = zeros(1 , np+1 ); % invento un vector de tamaño np+1 puntos
+ Ia_p = zeros(1 , np+1 ); % invento un vector de tamaño np+1 puntos
+ wr_p = zeros(1 , np+1 ); % invento un vector de tamaño np+1 puntos
+  
+%____________________________________________________________________________
+%Creo mi referencia que conmutará cada 5 segundos de +90° a -90°
+Ref = (pi/2)*square(t*2*pi/10); %onda cuadrada con amplitud pi/2
+%__________________________________________________________________________
+%Creo la perturbacion  dandole forma de onda cuadrada:
+inicio = 0.1869;  % Tiempo de inicio del primer flanco de subida
+T_perturbacion = 0.3; % Periodo de la onda
+pulse_width = 0.15; % Ancho del pulso, la mitad del periodo total de la onda
+TT = 0.6; % Duración total de la señal
+Torque = 1e-3; % Amplitud de la onda
+
+% Genero la perturbacion 
+TL = Torque * (square(2 * pi * (t - inicio) / T_perturbacion, 50) + 1) / 2 .* (t >= inicio);
+%__________________________________________________________________________
+%Establezco las condiciones iniciales de mis 3 variables de estado:
+Ia(1)=0;
+wr(1)=0;
+tita(1)=0;
+%Defino el vector de variables de estados con los valores iniciales 
+  x  = [Ia(1) wr(1)  tita(1) ]';
+x_hat= [ 0      0        0   ]'; %vector de estados del observador
+epsilon = 0 ; %Epsilon representa el integrador(cuarta variable de estado), lo inicializo en 0
+%__________________________________________________________________________
+for i = 1 : np % Bucle de simulacion que hace np iteraciones
+            y =  C*x;     %Calculo las salidas del sistema y lo defino y
+        y_hat =  C*x_hat; %Calculo las salidas del observador
+    epsilon_p =  Ref(i) -  C*x; %Error de integracion
+      epsilon = epsilon + epsilon_p*h; %Actualizo la variable del integrador
+
+    %__________________________________________________________________________
+    %ACCION DE CONTROL:
+    %u(i) = -K*x    + Ki*epsilon; % sin observador
+    u(i) = -K*x_hat + Ki*epsilon; % con observador
+    %__________________________________________________________________________
+    %Despues de crear la accion de control u(i) ,  opcionalmente puedo implementar una
+    %no-linealidad que llamare zona muerta, es un valor de la entrada que no produce ningun efecto:
+    if(abs(u(i)) < zona_muerta)
+        u(i) = 0;
+    else
+        u(i) = sign(u(i))*( abs(u(i))-zona_muerta );
+    end
+    %__________________________________________________________________________
+    %Dare valor a mis variables de estado usando INTEGRACION DE EULER:
+       Ia_p  = -(Ra/Laa)*Ia(i) - (Km/Laa)*wr(i) + (1/Laa)*u(i); %derivada de la corriente
+     Ia(i+1) = Ia(i) + Ia_p*h;                              %conformo los valores de la corriente
+      wr_p   = (Ki/J)*Ia(i) - (Bm/J)*wr(i)-(1/J)*TL(i); %derivada de la veloc angular
+     wr(i+1) = wr(i) + h*wr_p;                      %conformo los valores de la veloc angular
+    tita(i+1)=tita(i)+h*wr(i);                  %conformo los valores del angulo tita
+    %_________________________________________________________________________________
+    %Ahora actualizare las variables de estado del observador usando la
+    %gananacia del observador Ko calculada en la linea 108
+    x_hat = A*x_hat + B*u(i) + Ko*(y-y_hat);
+    %_____________________________________________________________________________
+    %Actualizo mi vector de estados:
+    x = [ Ia(i+1)  wr(i+1)  tita(i+1)]';
+end
+%__________________________________________________________________________
+%Finalmente grafico las variables de estado en el tiempo:
+figure(1)
+subplot(5,1,1); hold on;
+plot(t,tita,t ,Ref); title('Comparacion de Tita Vs la Referencia [radianes]'); grid on ; hold on;
+
+subplot(5,1,2); hold on;
+plot(t,wr);          title('Velocidad angular [rad/seg]');grid on ; hold on;
+
+subplot(5,1,3); hold on;
+plot(t,Ia);          title('Corriente de armaduras [Amp]');grid on ; hold on;
+
+subplot(5,1,4); hold on;
+plot(t,u);          title('Accion de control [V]');grid on ; hold on;
+
+subplot(5,1,5); hold on;
+plot(t,TL);          title('Perturbacion [N/m]');grid on ; hold on;
