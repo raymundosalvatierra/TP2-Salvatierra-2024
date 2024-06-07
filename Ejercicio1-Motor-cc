@@ -76,8 +76,48 @@ det(Ma) % al ver que su determinante es distinto de cero, ya se que este sistema
 %__________________________________________________________________________
 %Voy a usar el metodo LQR para controlar de manera eficiente el esfuerzo de
 %control y la dinamica del error
-  Q = diag([0.01  0.1  100  1]) %representa un peso ponderado de cada variable de estado
-  R = 0.001                    % representa el esfuerzo de control
+% Q = diag([1        1     1       1])      %corriente - veloc angular - angulo - error
+% Q = diag([10       10    10     10])      %corriente - veloc angular - angulo - error
+% Q = diag([1        10    1       1])      %corriente - veloc angular - angulo - error
+% Q = diag([0.1      1     1       1])      %corriente - veloc angular - angulo - error
+% Q = diag([0.01    0.5    0.5     1])      %corriente - veloc angular - angulo - error
+% Q = diag([0.01    0.1    0.1     1])      %corriente - veloc angular - angulo - error
+% Q = diag([0.001   0.01   0.01    1])      %corriente - veloc angular - angulo - error
+% Q = diag([0.0001  0.001  0.001   0.1])    %corriente - veloc angular - angulo - error
+% Q = diag([0.00001  0.001  0.001  1])      %corriente - veloc angular - angulo - error
+% Q = diag([0.000001  0.0001  0.0001  1])   %corriente - veloc angular - angulo - error
+% Q = diag([0.0000001  0.00001  0.00001  1])   %corriente - veloc angular - angulo - error
+% Q = diag([0.00000001  0.000001  0.000001  1])   %corriente - veloc angular - angulo - error
+% Q = diag([0.000000001  0.0000001  0.0000001  10])   %corriente - veloc angular - angulo - error
+% Q = diag([0.00000000001  0.0000001  0.0000001  10])   %corriente - veloc angular - angulo - error
+% Q = diag([0.0000000000001  0.0000001  0.0000001  10])   %corriente - veloc angular - angulo - error
+  Q = diag([0.000000000000001  0.0000001  0.0000001  10])   %corriente - veloc angular - angulo - error
+%__________________________________________________________________________________________________
+% R = 100                            %representa el esfuerzo de control
+% R = 1                              %representa el esfuerzo de control
+% R = 0.1                            %representa el esfuerzo de control
+% R = 0.002                          %representa el esfuerzo de control
+% R = 0.001                          %representa el esfuerzo de control
+% R = 0.0005                         %representa el esfuerzo de control
+% R = 0.00035                         representa el esfuerzo de control
+% R = 0.0002    INESTABLE             representa el esfuerzo de control
+% R = 0.0003                         %representa el esfuerzo de control
+% R = 0.00025   INESTABLE            %representa el esfuerzo de control
+% R = 0.00027   INESTABLE            %representa el esfuerzo de control
+% R = 0.000285  ESTABLE              %representa el esfuerzo de control
+% R = 0.000280  ESTABLE              %representa el esfuerzo de control
+% R = 0.000275  INESTABLE            %representa el esfuerzo de control
+% R = 0.000277  INESTABLE            %representa el esfuerzo de control
+% R = 0.0002780 ESTABLE              %representa el esfuerzo de control
+% R = 0.0002775 INESTABLE            %representa el esfuerzo de control
+% R = 0.0002777 INESTABLE            %representa el esfuerzo de control
+% R = 0.0002778 INESTABLE            %representa el esfuerzo de control
+% R = 0.000277900 INESTABLE          %representa el esfuerzo de control
+% R = 0.000277950 ESTABLE            %representa el esfuerzo de control
+% R = 0.000277925 ESTABLE            %representa el esfuerzo de control
+% R = 0.000277970 ESTABLE            %representa el esfuerzo de control
+% R = 0.000277915 CRITICAMENTE ESTABLE %representa el esfuerzo de control
+  R = 0.000277914                      %representa el esfuerzo de control
 KLQR=lqr(Aa,Ba,Q,R)
   K = KLQR(1:3)
   Ki=-KLQR(4)
