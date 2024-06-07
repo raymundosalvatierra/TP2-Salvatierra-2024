@@ -19,7 +19,7 @@
 %Basta con hacer la simulacion hasta 10 segundos porq lo demas se repetirá
 %Debemos respetar el periodo del torque y la referencia de 5 seg de la consigna
 %__________________________________________________________________________
-clear all ; close all ;  clc
+clear all ; close all ;  clc %para comparar controlador con observador borrar el close all 
 %PARÁMETROS DE MI MOTOR:
 %Primero declaro mis parametros calculados en el TP1
  %Laa=7.0274e-4  ; J=2.0628e-9  ; Ra=28.13  ; Bm=0 ; Ki=0.01162;   Km=0.0605;
@@ -76,18 +76,18 @@ det(Ma) % al ver que su determinante es distinto de cero, ya se que este sistema
 %__________________________________________________________________________
 %Voy a usar el metodo LQR para controlar de manera eficiente el esfuerzo de
 %control y la dinamica del error
-Q = diag([10  10  10  40]) %representa un peso ponderado de cada variable de estado
-R = 1                    % representa el esfuerzo de control
+  Q = diag([0.01  0.1  100  1]) %representa un peso ponderado de cada variable de estado
+  R = 0.001                    % representa el esfuerzo de control
 KLQR=lqr(Aa,Ba,Q,R)
   K = KLQR(1:3)
-Ki=-KLQR(4)
+  Ki=-KLQR(4)
 %_______________________________________________________
 %Preparo los vectores y variables para hacer mi simulacion:
 np = TT/h % numero de pasos para crear mi simulacion
           %Previamente elegi mi TT tiempo total y h tamaño de paso
 %________________________________________________________
 %Ahora construyo el sistema dual (Forma canonica observable)
-%Solo empleo las matrices orioginales (y no las ampliadas) porque en este
+%Solo empleo las matrices originales (y no las ampliadas) porque en este
 %caso no estoy teniendo integrador, y por lo tanto solo tendré 3 variables
 %de estado, las originales del sistema (en este caso tendré 3 elementos)
 %Trasponiendo las matrices del sistema canonico controlable:
@@ -101,9 +101,16 @@ Co=B'
 %Luego a esta forma canonica observable (dual) le calculo su observador
 %Implemento un observador para poder ver 2 variables de estado y con ellas
 %estimar una tercera variable que no puedo medir directamente
-do = [10 10 10] % corriente - velocidad - angulo
+%__________________________________________________________________________
+%Aplico controlador LQR porque en la consigna me piden que:
+%"acelere la dinamica del control" osea que haga un control eficiente
+%"evitando que la tension supere los 24V" osea que debo cuidar la magnitud
+%de u evitando que tome magnitudes exgeradas
+%___________________________________________________________________________
+
+do = [10000  1000  1000] % corriente - velocidad - angulo
 Qo = diag(do)
-Ro = 1         %comienzo probando con el valor mas simple posible
+Ro = 0.1         %comienzo probando con el valor mas simple posible
 Ko = (lqr(Ao,Bo,Qo,Ro))'
 %________________________________________________________________________
 %Ahora armo mi simulacion:
@@ -150,32 +157,38 @@ epsilon = 0 ; %Epsilon representa el integrador(cuarta variable de estado), lo i
 for i = 1 : np % Bucle de simulacion que hace np iteraciones
             y =  C*x;     %Calculo las salidas del sistema y lo defino y
         y_hat =  C*x_hat; %Calculo las salidas del observador
-    epsilon_p =  Ref(i) -  C*x; %Error de integracion
+    epsilon_p =  Ref(i) -  y ; %Error de integracion
       epsilon = epsilon + epsilon_p*h; %Actualizo la variable del integrador
 
     %__________________________________________________________________________
     %ACCION DE CONTROL:
-    %u(i) = -K*x    + Ki*epsilon; % sin observador
-    u(i) = -K*x_hat + Ki*epsilon; % con observador
+     u(i) = -K*x + Ki*epsilon; % solo controlador, sin observador
+    %u(i) = -Ko'*x_hat ;       % controlador con observador
+    %__________________________________________________________________________
+    %Para limitar la accion de control debo darle valores adecuados a la
+    %matriz R y no forzando u
     %__________________________________________________________________________
     %Despues de crear la accion de control u(i) ,  opcionalmente puedo implementar una
     %no-linealidad que llamare zona muerta, es un valor de la entrada que no produce ningun efecto:
-    if(abs(u(i)) < zona_muerta)
-        u(i) = 0;
-    else
-        u(i) = sign(u(i))*( abs(u(i))-zona_muerta );
-    end
+    %if(abs(u(i)) < zona_muerta)
+     %   u(i) = 0;
+    %else
+     %   u(i) = sign(u(i))*( abs(u(i))-zona_muerta );
+    %end
     %__________________________________________________________________________
     %Dare valor a mis variables de estado usando INTEGRACION DE EULER:
        Ia_p  = -(Ra/Laa)*Ia(i) - (Km/Laa)*wr(i) + (1/Laa)*u(i); %derivada de la corriente
      Ia(i+1) = Ia(i) + Ia_p*h;                              %conformo los valores de la corriente
       wr_p   = (Ki/J)*Ia(i) - (Bm/J)*wr(i)-(1/J)*TL(i); %derivada de la veloc angular
      wr(i+1) = wr(i) + h*wr_p;                      %conformo los valores de la veloc angular
-    tita(i+1)=tita(i)+h*wr(i);                  %conformo los valores del angulo tita
+    tita(i+1)= tita(i)+ h*wr(i);                  %conformo los valores del angulo tita
     %_________________________________________________________________________________
     %Ahora actualizare las variables de estado del observador usando la
     %gananacia del observador Ko calculada en la linea 108
-    x_hat = A*x_hat + B*u(i) + Ko*(y-y_hat);
+    
+     x_hat_p = A*x_hat + B*u(i) + Ko*(y-y_hat);
+      x_hat  =   x_hat + x_hat_p*h ;  %lo integro y le sumo el valor anterior
+   
     %_____________________________________________________________________________
     %Actualizo mi vector de estados:
     x = [ Ia(i+1)  wr(i+1)  tita(i+1)]';
