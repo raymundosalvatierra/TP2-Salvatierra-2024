@@ -18,69 +18,66 @@ clc; clear all; close all;
 %___________________________________________________________________________
 %Primero hago controlador y observador cuando la grua se vá, sin carga
 % Parámetros:
-m1  = 0.1   ;    F  = 0.1   ;   l  = 1.6   ; g  = 9.8   ;   M  = 1.5;
+m  = 0.1   ;    F  = 0.1   ;   l  = 1.6   ; g  = 9.8   ;   M  = 1.5;
 %____________________________________________________________________________
 %Matriz de estados cuando se va               %variables de estado:
 A = [0     1               0           0;     % delta
-     0    -F/M            -m1*g/M      0;     % delta_p
+     0    -F/M            -m*g/M      0;     % delta_p
      0       0               0         1;     % phi 
-     0   -F/(l*M)     -g*(m1+M)/(l*M)  0]     % phi_p
+     0   -F/(l*M)     -g*(m+M)/(l*M)  0];    % phi_p
 
    
 B = [   0   ;
        1/M  ;
         0   ;
-     1/(l*M)]
+     1/(l*M)];
   
-C = [1 0 0 0;          % Wr
+C = [1 0 0 0];         % Wr
     % 0 0 1 0]         % Theta
    
 %__________________________________________________________________________________________ 
 %Como en la consigna ya me dicen el tamaño de paso (h=1e-4) y el tiempo total (TT=15 seg) que
 %debe durar la simulacion, no es necesario calcular los autovalores de A:
- h = 1e-4;
+h = 1e-4;
 TT = 15;
 %_____________________________________________________________________________
 
 % Lo que sí es necesario es comprobar que el sistema sea controlable:
-M1  = [ B   A*B   A^2*B   A^3*B   A^4*B ]  
+M1  = [ B   A*B   A^2*B   A^3*B ];  
 
 %Calculo el rango de esta matriz de controlabilidad
-rank(M1)
+rank(M1);
 
 %______________________________________________________________________________
 % Como tengo referencia distinta de cero, debo ampliar las matrices
-Aa = [ A , zeros(4,1) ; -C(1,:), eye(1)]
-Ba = [ B; 0]
+Aa = [ A , zeros(4,1) ; -C(1,:), eye(1)];
+Ba = [ B; 0];
 %________________________________________________________________________________
 % Calculo el controlador LQR
-Q = diag([ 1  1  1  1  1 ])   % posicion - velocidad, angulo, angulo_p, error       
-R = 1
-KLQR = lqr(Aa, Ba, Q, R)
-K = KLQR(1:4)     
-Ki = -KLQR(5)
+Q = diag([ 1  1  1  1  1 ]);   % posicion - velocidad, angulo, angulo_p, error       
+R = 1;
+KLQR = lqr(Aa, Ba, Q, R);
+K = KLQR(1:4);     
+Ki = -KLQR(5);
 
 %_________________________________________________________________________________
 %Ahora voy a plantear la forma canonica observable de mi sistema dual
-Ao = A'
-Bo = C'       
-Co = B'
+Ao = A';
+Bo = C';       
+Co = B';
 
-Qo = diag([1  1  1  1])
-Ro = diag([1  1])
+Qo = diag([1  1  1  1]);
+Ro = diag([1]);
 
-      
 % Cálculo del Observador 
-Ko  = (lqr(Ao  , Bo  , Qo  , Ro))'
+Ko  = (lqr(Ao  , Bo  , Qo  , Ro))';
 %___________________________________________________________________________
 % SIMULACIÓN
 % TT = 15;                Tiempo Total de la simulación
 %  h = 1e-4;              Tiempo de Integración Euler
-np =(TT/h)              % Numero de puntos a simular
+np = (TT/h);              % Numero de puntos a simular
 zona_muerta = 0.5;        % Zona muerta del actuador
 epsilon = 0;
-delta_p = 0;
-phi_p = 0;
 
 t       = 0 : h : TT;
 u       = zeros(1, np+1);
@@ -101,9 +98,7 @@ xop = [0 0 pi 0]';
 x_obs = [0 0 pi 0]';
 %____________________________________________________________________________
 
-
 ref = 10;
-
 
 % Integración contínua
 for i = 1 : np
@@ -115,42 +110,41 @@ for i = 1 : np
     epsilon_p = ref - y(1);
     epsilon   = epsilon + epsilon_p*h;
     
-    u = -K*(x_obs - xop) + Ki*epsilon;  % Con Observador
-
-
-    u(i) = u;
+    u(i) = -K*(x_obs - xop) + Ki*epsilon;  % Con Observador
    
     % Sistema no lineal:
-    delta_p     = (1/(M+m))*(u(i) - m*l*phi_p*cos(phi(i)) + m*l*phi_p(i)^2*sin(phi(i)) - F*delta_p(i) );
-    phi_p      = (1/l)*( g*sin(phi(i)) - delta_p*cos(phi(i)) );
-    delta_p(i+1)= delta_p(i) + delta_p(i)*h;
-    delta(i+1)  = delta(i) + delta_p(i)*h;
-    phi_p(i+1)  = phi_p(i) + phi_p(i)*h;
-    phi(i+1)    = phi(i) + phi_p(i)*h;
-    
-end
+    delta_p_next = (1/(M+m))*(u(i) - m*l*phi_p(i)*cos(phi(i)) + m*l*phi_p(i)^2*sin(phi(i)) - F*delta_p(i) );
+    phi_p_next   = (1/l)*( g*sin(phi(i)) - delta_p_next*cos(phi(i)) );
+    delta_p(i+1) = delta_p(i) + delta_p_next*h;
+    delta(i+1)   = delta(i) + delta_p(i)*h;
+    phi_p(i+1)   = phi_p(i) + phi_p_next*h;
+    phi(i+1)     = phi(i) + phi_p(i)*h;
     
     x = [delta(i+1) delta_p(i+1) phi(i+1) phi_p(i+1)]';
     
     % Observador
-    x_obs = A*x_obs + B*u(i) + Ko*(y - y_obs) + xop;
-    end
+    x_obs_p = A*x_obs + B*u(i) + Ko*(y - y_obs) + xop;
+    x_obs = x_obs + h*x_obs_p;
+end
 
 %_______________________________________________________________________
 % GRÁFICO LAS VARIABLES DE ESTADO:
 figure(1);
-subplot(5,2,1); grid on; hold on;
-plot(t,phi_p);grid on; title('Veloc de cambio del angulo');
 
-subplot(5,2,2); grid on; hold on;
-plot(t,phi); title('Ángulo');xlabel('Tiempo');
+% Columna izquierda
+subplot(3,2,1); grid on; hold on;
+plot(t,delta); title('Posición grúa'); xlabel('Tiempo');
 
-subplot(5,2,3); grid on; hold on;
-plot(t,delta);title('Posición grúa ');xlabel('Tiempo');
+subplot(3,2,3); grid on; hold on;
+plot(t,delta_p); title('Veloc de la grúa'); xlabel('Tiempo');
 
-subplot(5,2,4); grid on; hold on;
-plot( t , delta_p );title('Veloc de la grúa');
+subplot(3,2,5); grid on; hold on;
+plot(t,u); title('Acción de control'); xlabel('Tiempo [Seg]');
 
-subplot(5,1,5); grid on; hold on;
-plot( t , u );title('Acción de control' );xlabel('Tiempo [Seg]');
+% Columna derecha
+subplot(3,2,2); grid on; hold on;
+plot(t,phi); title('Ángulo'); xlabel('Tiempo');
+
+subplot(3,2,4); grid on; hold on;
+plot(t,phi_p); title('Veloc de cambio del angulo'); xlabel('Tiempo');
  
