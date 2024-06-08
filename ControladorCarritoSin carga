@@ -54,7 +54,7 @@ Aa = [ A , zeros(4,1) ; -C(1,:), eye(1)]
 Ba = [ B; 0]
 %________________________________________________________________________________
 % Calculo el controlador LQR
-Q = diag([ 10  10  100  100  0.001 ])   % posicion - velocidad, angulo, angulo_p, error       
+Q = diag([ 1  1  1  1  1 ])   % posicion - velocidad, angulo, angulo_p, error       
 R = 1
 KLQR = lqr(Aa, Ba, Q, R)
 K = KLQR(1:4)     
@@ -66,8 +66,8 @@ Ao = A'
 Bo = C'       
 Co = B'
 
-Qo = diag([1  50  500  0.1])
-Ro = diag([0.1  0.1])
+Qo = diag([1  1  1  1])
+Ro = diag([1  1])
 
       
 % Cálculo del Observador 
