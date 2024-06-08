@@ -1,0 +1,156 @@
+% TRABAJO PRACTICO N°2
+% Profesor: Julian Pucheta
+% Alumno: Herman Raymundo Salvatierra
+% Sistema no - lineal de 4 variables de estado (Caso del carrito con péndulo)
+% Consigna 3:
+% Calcular un sistema controlador que haga evolucionar al péndulo en el equilibrio estable. 
+% Objetivo: Partiendo desde la posicion d=0 y el ángulo en pi, hacer 
+% que el carrito se desplace a 10 metros evitando las oscilaciones de la masa m, considerando que es una 
+% grúa. Una vez que el carrito llegó a una distancia d=10mts, modificar a m a un valor 10 veces mayor 
+% y volver al origen evitando oscilaciones (la grua regresa con peso extra)
+%  -Considerar que sólo puede medirse el desplazamiento y el ángulo (para el observador) 
+%  -Especificar el rango posible para el tiempo de muestreo para implementar el sistema en un 
+%   microcontrolador.  
+%  -Determinar el efecto de la nolinealidad en la acción de control, descripta en la Figura 4, y verificar cuál 
+%   es el máximo valor admisible de ésa no linealidad.
+%%
+clc; clear all; close all;
+%___________________________________________________________________________
+%Primero hago controlador y observador cuando la grua se vá, sin carga
+% Parámetros:
+m1  = 0.1   ;    F  = 0.1   ;   l  = 1.6   ; g  = 9.8   ;   M  = 1.5;
+%____________________________________________________________________________
+%Matriz de estados cuando se va               %variables de estado:
+A = [0     1               0           0;     % delta
+     0    -F/M            -m1*g/M      0;     % delta_p
+     0       0               0         1;     % phi 
+     0   -F/(l*M)     -g*(m1+M)/(l*M)  0]     % phi_p
+
+   
+B = [   0   ;
+       1/M  ;
+        0   ;
+     1/(l*M)]
+  
+C = [1 0 0 0;          % Wr
+    % 0 0 1 0]         % Theta
+   
+%__________________________________________________________________________________________ 
+%Como en la consigna ya me dicen el tamaño de paso (h=1e-4) y el tiempo total (TT=15 seg) que
+%debe durar la simulacion, no es necesario calcular los autovalores de A:
+ h = 1e-4;
+TT = 15;
+%_____________________________________________________________________________
+
+% Lo que sí es necesario es comprobar que el sistema sea controlable:
+M1  = [ B   A*B   A^2*B   A^3*B   A^4*B ]  
+
+%Calculo el rango de esta matriz de controlabilidad
+rank(M1)
+
+%______________________________________________________________________________
+% Como tengo referencia distinta de cero, debo ampliar las matrices
+Aa = [ A , zeros(4,1) ; -C(1,:), eye(1)]
+Ba = [ B; 0]
+%________________________________________________________________________________
+% Calculo el controlador LQR
+Q = diag([ 10  10  100  100  0.001 ])   % posicion - velocidad, angulo, angulo_p, error       
+R = 1
+KLQR = lqr(Aa, Ba, Q, R)
+K = KLQR(1:4)     
+Ki = -KLQR(5)
+
+%_________________________________________________________________________________
+%Ahora voy a plantear la forma canonica observable de mi sistema dual
+Ao = A'
+Bo = C'       
+Co = B'
+
+Qo = diag([1  50  500  0.1])
+Ro = diag([0.1  0.1])
+
+      
+% Cálculo del Observador 
+Ko  = (lqr(Ao  , Bo  , Qo  , Ro))'
+%___________________________________________________________________________
+% SIMULACIÓN
+% TT = 15;                Tiempo Total de la simulación
+%  h = 1e-4;              Tiempo de Integración Euler
+np =(TT/h)              % Numero de puntos a simular
+zona_muerta = 0.5;        % Zona muerta del actuador
+epsilon = 0;
+delta_p = 0;
+phi_p = 0;
+
+t       = 0 : h : TT;
+u       = zeros(1, np+1);
+delta_p = zeros(1, np+1);
+delta   = zeros(1, np+1);
+phi_p   = zeros(1, np+1);
+phi     = zeros(1, np+1);
+
+% CONDICIONES INICIALES
+  delta(1) = 0;
+delta_p(1) = 0;
+    phi(1) = pi;  %el angulo comienza en un angulo de 180° (equilibrio estable)
+  phi_p(1) = 0;
+
+x = [delta(1) delta_p(1) phi(1) phi_p(1)]';
+xop = [0 0 pi 0]';
+
+x_obs = [0 0 pi 0]';
+%____________________________________________________________________________
+
+
+ref = 10;
+
+
+% Integración contínua
+for i = 1 : np
+    
+    % Ley de control
+    y = C*x;
+    y_obs = C*(x_obs + xop);
+
+    epsilon_p = ref - y(1);
+    epsilon   = epsilon + epsilon_p*h;
+    
+    u = -K*(x_obs - xop) + Ki*epsilon;  % Con Observador
+
+
+    u(i) = u;
+   
+    % Sistema no lineal:
+    delta_p     = (1/(M+m))*(u(i) - m*l*phi_p*cos(phi(i)) + m*l*phi_p(i)^2*sin(phi(i)) - F*delta_p(i) );
+    phi_p      = (1/l)*( g*sin(phi(i)) - delta_p*cos(phi(i)) );
+    delta_p(i+1)= delta_p(i) + delta_p(i)*h;
+    delta(i+1)  = delta(i) + delta_p(i)*h;
+    phi_p(i+1)  = phi_p(i) + phi_p(i)*h;
+    phi(i+1)    = phi(i) + phi_p(i)*h;
+    
+end
+    
+    x = [delta(i+1) delta_p(i+1) phi(i+1) phi_p(i+1)]';
+    
+    % Observador
+    x_obs = A*x_obs + B*u(i) + Ko*(y - y_obs) + xop;
+    end
+
+%_______________________________________________________________________
+% GRÁFICO LAS VARIABLES DE ESTADO:
+figure(1);
+subplot(5,2,1); grid on; hold on;
+plot(t,phi_p);grid on; title('Veloc de cambio del angulo');
+
+subplot(5,2,2); grid on; hold on;
+plot(t,phi); title('Ángulo');xlabel('Tiempo');
+
+subplot(5,2,3); grid on; hold on;
+plot(t,delta);title('Posición grúa ');xlabel('Tiempo');
+
+subplot(5,2,4); grid on; hold on;
+plot( t , delta_p );title('Veloc de la grúa');
+
+subplot(5,1,5); grid on; hold on;
+plot( t , u );title('Acción de control' );xlabel('Tiempo [Seg]');
+ 
