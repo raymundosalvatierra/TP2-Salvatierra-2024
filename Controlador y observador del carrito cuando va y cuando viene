@@ -1,0 +1,213 @@
+% TRABAJO PRACTICO N°2
+% Profesor: Julian Pucheta
+% Alumno: Herman Raymundo Salvatierra
+% Sistema no - lineal de 4 variables de estado (Caso del carrito con péndulo)
+% Consigna 3:
+% Calcular un sistema controlador que haga evolucionar al péndulo en el equilibrio estable. 
+% Objetivo: Partiendo desde la posicion d=0 y el ángulo en pi, hacer 
+% que el carrito se desplace a 10 metros evitando las oscilaciones de la masa m, considerando que es una 
+% grúa. Una vez que el carrito llegó a una distancia d=10mts, modificar a m a un valor 10 veces mayor 
+% y volver al origen evitando oscilaciones (la grua regresa con peso extra)
+%  -Considerar que sólo puede medirse el desplazamiento y el ángulo (para el observador) 
+%  -Especificar el rango posible para el tiempo de muestreo para implementar el sistema en un 
+%   microcontrolador.  
+%  -Determinar el efecto de la nolinealidad en la acción de control, descripta en la Figura 4, y verificar cuál 
+%   es el máximo valor admisible de ésa no linealidad.
+
+clc; clear all; close all;
+%___________________________________________________________________________
+%Primero hago controlador y observador cuando la grua se vá, sin carga
+% Parámetros:
+m  = 0.1   ;    F  = 0.1   ;   l  = 1.6   ; g  = 9.8   ;   M  = 1.5 ;  m2 = m*10;
+%____________________________________________________________________________
+%Matriz de estados cuando se va               %variables de estado:
+A = [0     1               0           0;     % delta
+     0    -F/M            -m*g/M       0;     % delta_p
+     0       0               0         1;     % phi 
+     0   -F/(l*M)     -g*(m+M)/(l*M)   0];    % phi_p
+ 
+%Matriz de estados cuando regresa:
+A2 = [0      1             0          0;           
+      0    -F/M         -m2*g/M       0;              
+      0       0             0         1;               
+      0   -F/(l*M)  -g*(m2+M)/(l*M)   0]
+
+   
+B = [   0   ;
+       1/M  ;
+        0   ;
+     1/(l*M)];
+  
+C = [1 0 0 0];         % Wr
+    % 0 0 1 0]         % Theta
+   
+%__________________________________________________________________________________________ 
+%Como en la consigna ya me dicen el tamaño de paso (h=1e-4) y el tiempo total (TT=15 seg) que
+%debe durar la simulacion, no es necesario calcular los autovalores de A:
+h = 1e-4;
+TT = 15;
+%_____________________________________________________________________________
+
+% Lo que sí es necesario es comprobar que el sistema sea controlable:
+M1  = [ B   A*B    A^2*B    A^3*B ];  
+%Tambien quiero evaluar si mi segundo sistema es controlable:
+M2  = [ B   A2*B   A2^2*B   A2^3*B ];  
+
+%Calculo el rango de esta matriz de controlabilidad
+rank(M1);
+%Calculo el rango de la mtriz de controlabilidad cuando regresa:
+rank(M2)
+
+%______________________________________________________________________________
+% Como tengo referencia distinta de cero, debo ampliar las matrices
+Aa = [ A , zeros(4,1) ; -C(1,:), eye(1)];
+Ba = [ B; 0];
+%Tambien debo ampliar la matriz cuando regresa el carrito:
+Aa2 = [ A2 , zeros(4,1) ; -C(1,:), eye(1)];
+%________________________________________________________________________________
+% Calculo el controlador LQR del carrito cuando va:
+%Q = diag([ 1  1  1  1  1 ]);   % posicion - velocidad, angulo, omega, error 
+%Q = diag([ 100  10  10  10  1 ]);   % posicion - velocidad, angulo, omega, error
+ Q = diag([ 100  10  10000  10  1 ]);   % posicion - velocidad, angulo, omega, error
+%R = 1;
+%R = 10;
+%R = 100;
+R = 300;
+%_______________________________________________________________________________
+KLQR = lqr(Aa, Ba, Q, R);
+K = KLQR(1:4);     
+Ki = -KLQR(5);
+%_________________________________________________________________________________
+% Tamnien calculo el controlador LQR del carrito cuando regresa:
+Q2 = diag([ 100  10  10  10  1 ]);   % posicion - velocidad, angulo, omega, error       
+R2 = 300;
+KLQR2 = lqr(Aa2, Ba, Q2, R2);
+K2 = KLQR(1:4);     
+Ki2 = -KLQR(5);
+
+%_________________________________________________________________________________
+%Ahora voy a plantear la forma canonica observable de mi sistema dual
+%en el observador no hace falta la matriz ampliada, solo las originales
+Ao = A';
+Bo = C';       
+Co = B';
+%_____________________________________________________________________________
+%Y calculo tambien cuando se va:
+Ao = A';
+
+% Qo = diag([1    1    1      1 ]);  % posicion - velocidad, angulo, veloc angulo
+% Qo = diag([20  900  1000  1000]);  % posicion - velocidad, angulo, veloc angulo
+% Qo = diag([90  900000  90000000  1000]);  % posicion - velocidad, angulo, veloc angulo
+  Qo = diag([900  90000000  9e10  5e10]);  % posicion - velocidad, angulo, veloc angulo
+%Ro = 1;
+%Ro = 50;
+ Ro = 500;
+%_____________________________________________________________________________
+%Y calculo tambien cuando regresa:
+Ao2 = A2';
+
+Qo2 = diag([1  1  1  1]);
+Ro2 = 1;
+%_____________________________________________________________________________
+%Calculo del observador cuando se va sin carga:
+Ko  = (lqr(Ao  , Bo  , Qo  , Ro))';
+
+% Cálculo del Observador 
+Ko2  = (lqr(Ao2  , Bo  , Qo2  , Ro2))';
+%___________________________________________________________________________
+% SIMULACIÓN
+% TT = 15;                Tiempo Total de la simulación
+%  h = 1e-4;              Tiempo de Integración Euler
+np = (TT/h);              % Numero de puntos a simular
+zona_muerta = 0.5;        % Zona muerta del actuador
+epsilon = 0;
+
+t       = 0 : h : TT;
+u       = zeros(1, np+1);
+delta_p = zeros(1, np+1);
+delta   = zeros(1, np+1);
+phi_p   = zeros(1, np+1);
+phi     = zeros(1, np+1);
+
+% CONDICIONES INICIALES:
+  delta(1) = 0;
+delta_p(1) = 0;
+    phi(1) = pi;  %el angulo comienza en un angulo de 180° (equilibrio estable)
+  phi_p(1) = 0;
+
+    x = [delta(1) delta_p(1) phi(1) phi_p(1)]';
+  xop = [0  0  pi  0]';
+
+x_obs = [0  0  pi  0]';
+%____________________________________________________________________________
+
+ref = 10;
+
+% Integración contínua
+for i = 1 : np
+    
+    % Ley de control
+        y = C*x;
+    y_obs = C*(x_obs + xop);
+
+    epsilon_p = ref - y(1); %error_derivado = referencia - salida
+    epsilon   = epsilon + epsilon_p*h;
+    
+      u(i)    = -K*(  x   - xop) + Ki*epsilon;   % Sin Observador
+    % u(i) = -K*(x_obs - xop) + Ki*epsilon;      % Con Observador
+   
+    %No linealidad del Actuador
+       %  if(abs(u(i)) < zona_muerta)
+       %    u(i) = 0;               
+       %   else
+       %    u(i) = sign(u(i))*(abs(u(i)) - zona_muerta);
+       %   end
+    % Sistema no lineal:
+    delta_p_next = (1/(M+m))*(u(i) - m*l*phi_p(i)*cos(phi(i)) + m*l*phi_p(i)^2*sin(phi(i)) - F*delta_p(i) );
+    phi_p_next   = (1/l)*( g*sin(phi(i)) - delta_p_next*cos(phi(i)) );
+    delta_p(i+1) = delta_p(i) + delta_p_next*h;
+    delta(i+1)   = delta(i) + delta_p(i)*h;
+    phi_p(i+1)   = phi_p(i) + phi_p_next*h;
+    phi(i+1)     = phi(i) + phi_p(i)*h;
+    
+    
+    if(delta(i+1) >= 10)
+        
+            K = K2;
+            Ki = Ki2;
+            Ko = Ko2;
+            A = A2;
+            
+            m = m2;
+            ref = 0;
+            
+        end
+        
+        
+    x = [delta(i+1) delta_p(i+1) phi(i+1) phi_p(i+1)]';
+    
+    % Observador
+    x_obs_p = A*x_obs + B*u(i) + Ko*(y - y_obs) + xop;
+    x_obs   = x_obs + h*x_obs_p;
+end
+
+%_______________________________________________________________________
+% GRÁFICO LAS VARIABLES DE ESTADO:
+figure(1);
+
+% Columna izquierda
+subplot(3,2,1); grid on; hold on;
+plot(t,delta); title('Posición grúa'); xlabel('Tiempo');
+
+subplot(3,2,3); grid on; hold on;
+plot(t,delta_p); title('Veloc de la grúa'); xlabel('Tiempo');
+
+subplot(3,2,5); grid on; hold on;
+plot(t,u); title('Acción de control'); xlabel('Tiempo [Seg]');
+
+% Columna derecha
+subplot(3,2,2); grid on; hold on;
+plot(t,phi); title('Ángulo'); xlabel('Tiempo');
+
+subplot(3,2,4); grid on; hold on;
+plot(t,phi_p); title('Veloc de cambio del angulo'); xlabel('Tiempo');
