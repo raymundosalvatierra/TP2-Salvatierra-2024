@@ -31,15 +31,14 @@ A2 = [0      1             0          0;
       0    -F/M         -m2*g/M       0;              
       0       0             0         1;               
       0   -F/(l*M)  -g*(m2+M)/(l*M)   0]
-
    
 B = [   0   ;
        1/M  ;
         0   ;
      1/(l*M)];
   
-C = [1 0 0 0];         % Wr
-    % 0 0 1 0]         % Theta
+C = [1 0 0 0         % Wr
+     0 0 1 0];         % Theta
    
 %__________________________________________________________________________________________ 
 %Como en la consigna ya me dicen el tamaño de paso (h=1e-4) y el tiempo total (TT=15 seg) que
@@ -101,13 +100,13 @@ Ao = A';
   Qo = diag([900  90000000  9e10  5e10]);  % posicion - velocidad, angulo, veloc angulo
 %Ro = 1;
 %Ro = 50;
- Ro = 500;
+ Ro =diag([500  500]);
 %_____________________________________________________________________________
 %Y calculo tambien cuando regresa:
 Ao2 = A2';
 
-Qo2 = diag([1  1  1  1]);
-Ro2 = 1;
+Qo2 = diag([1  1e2  1  1e2]);
+Ro2 = diag([ 1e-3   1e-3 ]);
 %_____________________________________________________________________________
 %Calculo del observador cuando se va sin carga:
 Ko  = (lqr(Ao  , Bo  , Qo  , Ro))';
@@ -153,8 +152,8 @@ for i = 1 : np
     epsilon_p = ref - y(1); %error_derivado = referencia - salida
     epsilon   = epsilon + epsilon_p*h;
     
-      u(i)    = -K*(  x   - xop) + Ki*epsilon;   % Sin Observador
-    % u(i) = -K*(x_obs - xop) + Ki*epsilon;      % Con Observador
+     % u(i)  = -K*(  x   - xop) + Ki*epsilon;   % Sin Observador
+     u(i) = -K*(x_obs - xop) + Ki*epsilon;      % Con Observador
    
     %No linealidad del Actuador
        %  if(abs(u(i)) < zona_muerta)
@@ -187,7 +186,7 @@ for i = 1 : np
     x = [delta(i+1) delta_p(i+1) phi(i+1) phi_p(i+1)]';
     
     % Observador
-    x_obs_p = A*x_obs + B*u(i) + Ko*(y - y_obs) + xop;
+    x_obs_p = A*(x_obs-xop) + B*u(i) + Ko*(y - y_obs);
     x_obs   = x_obs + h*x_obs_p;
 end
 
