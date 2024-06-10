@@ -22,8 +22,7 @@
 clear all ; close all ;  clc %para comparar controlador con observador borrar el close all 
 %PARÁMETROS DE MI MOTOR:
 %Primero declaro mis parametros calculados en el TP1
- %Laa=7.0274e-4  ; J=2.0628e-9  ; Ra=28.13  ; Bm=0 ; Ki=0.01162;   Km=0.0605;
-  Laa=4.9900e-04 ; J=4.1300e-06 ; Ra=20  ;    Bm=0 ; Ki=16.52  ;   Km=0.0605;
+   Laa=4.9900e-04 ; J=4.1300e-06 ; Ra=20  ;    Bm=0 ; Ki=16.52  ;   Km=0.0605;
 %__________________________________________________________________________
 %Comienzo planteando las matrices de estado:
 %(En su forma canonica controlable, para calcularle el controlador)
@@ -148,9 +147,19 @@ Co=B'
 %de u evitando que tome magnitudes exgeradas
 %___________________________________________________________________________
 
-do = [10000  1000  1000] % corriente - velocidad - angulo
-Qo = diag(do)
-Ro = 0.1         %comienzo probando con el valor mas simple posible
+%do = [10000  1000  1000] % corriente - velocidad - angulo
+%do = [0.000000000000001  0.0000001  0.0000001 ] % corriente - velocidad - angulo
+%do = [1e-17  1e-8  0.0000001 ] % corriente - velocidad - angulo
+%do = [1e-17  1e-8  0.1 ] % corriente - velocidad - angulo
+%do = [1e-20  1e-16  1e-10 ] % corriente - velocidad - angulo
+ do = [1e-23  1e-17  1e-15 ] % corriente - velocidad - angulo
+ Qo = diag(do)
+ %Ro= 1         %comienzo probando con el valor mas simple posible
+%Ro = 0.000277914
+%Ro = 0.0277914     
+%Ro = 1e-4 
+%Ro = 1e-6
+Ro = 1e-7
 Ko = (lqr(Ao,Bo,Qo,Ro))'
 %________________________________________________________________________
 %Ahora armo mi simulacion:
@@ -203,12 +212,12 @@ for i = 1 : np % Bucle de simulacion que hace np iteraciones
     %__________________________________________________________________________
     %ACCION DE CONTROL:
      u(i) = -K*x + Ki*epsilon; % solo controlador, sin observador
-    %u(i) = -Ko'*x_hat ;       % controlador con observador
+     %u(i) = -Ko'*x_hat ;       % controlador con observador
     %__________________________________________________________________________
     %Para limitar la accion de control debo darle valores adecuados a la
     %matriz R y no forzando u
     %__________________________________________________________________________
-    %Despues de crear la accion de control u(i) ,  opcionalmente puedo implementar una
+    %Despues de crear la accion de control u(i), opcionalmente puedo implementar una
     %no-linealidad que llamare zona muerta, es un valor de la entrada que no produce ningun efecto:
     %if(abs(u(i)) < zona_muerta)
      %   u(i) = 0;
