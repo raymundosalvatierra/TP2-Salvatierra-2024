@@ -35,7 +35,8 @@ B = [1/Laa ; %x1   dejo B de una sola columna para poder hacer un sistema dual
       0    ; %x2
       0    ] %x3
   
-C = [ 0    0    1]
+C = [ 0    0    1
+      0    1    0 ]
 
 D = [ 0    0 ]
 %__________________________________________________________________________
@@ -56,18 +57,18 @@ h = 1e-6 %elijo un tamaño de paso pequeño para asegurarme mejor resolucion en 
 %que mi referencia conmuta cada 5 segundos, voy a definir un tiempo de
 %simulacion que me permita analizar 2 conmutaciones (una en +90° y otra en
 %-90°) por lo tanto defino un tiempo total de simulacion de TT = 10seg
-TT = 10 %Tiempo Total de la simulacion, incluye 2 conmutaciones
+TT = 1 %Tiempo Total de la simulacion, incluye 2 conmutaciones
 %__________________________________________________________________________
 %Como en este ejercicio voy a tener referencias distintas de cero, entonces
 %debo agregar un integrador y por lo tanto plantear mis matrices ampliadas:
 % Construcción del sistema ampliado
-Aa = [A zeros(3,1);-C 0 ]
+Aa = [A zeros(3,1);-C(1,:) 0 ] %elijo solo la primera fila
 
 Ba = [B(:,1);  0 ]  %Aca en la B ampliada omito la columna del torque porque quiero 
                     %poder convertirlo a su forma canonica observable y ademas 
                     %sólo busco controlar el angulo (necesitaré hacer un sistema dual)
                     
-Ca = [C  0 ]        %A la matriz C le agrego un elemento 0 que representa al integrador
+Ca = [C(1,:)  0 ]        %A la matriz C le agrego un elemento 0 que representa al integrador
 %__________________________________________________________________________
 Ma=[Ba Aa*Ba Aa^2*Ba Aa^3*Ba ]%Matriz Controlabilidad
 %Evalúo si la matriz de controlabilidad tiene determinante distinta de cero
@@ -159,7 +160,7 @@ Co=B'
 %Ro = 0.0277914     
 %Ro = 1e-4 
 %Ro = 1e-6
-Ro = 1e-7
+Ro = diag([1e-7   1e-7])
 Ko = (lqr(Ao,Bo,Qo,Ro))'
 %________________________________________________________________________
 %Ahora armo mi simulacion:
@@ -168,7 +169,7 @@ Ko = (lqr(Ao,Bo,Qo,Ro))'
 % np = (TT/h) numero de puntos de la simulacion
 %__________________________________________________________________________
 %Implemento el efecto de la no-linealidad:
-zona_muerta = 1 %con voltaje de entrada desde -1 hasta +1 el actuador lineal no se encenderá
+zona_muerta = 10 %con voltaje de entrada desde -1 hasta +1 el actuador lineal no se encenderá
                 %sospecho que cuando lo aplique debo consultar su valor absoluto
 %__________________________________________________________________________
 %Formo los valores punto a punto de mi simulacion:
@@ -206,24 +207,24 @@ epsilon = 0 ; %Epsilon representa el integrador(cuarta variable de estado), lo i
 for i = 1 : np % Bucle de simulacion que hace np iteraciones
             y =  C*x;     %Calculo las salidas del sistema y lo defino y
         y_hat =  C*x_hat; %Calculo las salidas del observador
-    epsilon_p =  Ref(i) -  y ; %Error de integracion
+    epsilon_p =  Ref(i) -  y(1) ; %Error de integracion
       epsilon = epsilon + epsilon_p*h; %Actualizo la variable del integrador
 
     %__________________________________________________________________________
     %ACCION DE CONTROL:
-     u(i) = -K*x + Ki*epsilon; % solo controlador, sin observador
-     %u(i) = -Ko'*x_hat ;       % controlador con observador
+    % u(i) = -K*x + Ki*epsilon; % solo controlador, sin observador
+     u(i) = -K*x_hat + Ki*epsilon;       %  con observador
     %__________________________________________________________________________
     %Para limitar la accion de control debo darle valores adecuados a la
     %matriz R y no forzando u
     %__________________________________________________________________________
     %Despues de crear la accion de control u(i), opcionalmente puedo implementar una
     %no-linealidad que llamare zona muerta, es un valor de la entrada que no produce ningun efecto:
-    %if(abs(u(i)) < zona_muerta)
-     %   u(i) = 0;
-    %else
-     %   u(i) = sign(u(i))*( abs(u(i))-zona_muerta );
-    %end
+    if(abs(u(i)) < zona_muerta)
+        u(i) = 0;
+    else
+        u(i) = sign(u(i))*( abs(u(i))-zona_muerta );
+    end
     %__________________________________________________________________________
     %Dare valor a mis variables de estado usando INTEGRACION DE EULER:
        Ia_p  = -(Ra/Laa)*Ia(i) - (Km/Laa)*wr(i) + (1/Laa)*u(i); %derivada de la corriente
