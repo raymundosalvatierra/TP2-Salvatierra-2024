@@ -1,0 +1,244 @@
+%TRABAJO PRACTICO N° 2
+%Profesor: Julian Pucheta
+%Estudiante: Herman Raymundo Salvatierra
+% Ejercicio 2:
+%Para el caso del avión, emplear un tiempo de integración por Euler adecuado y un tiempo de simulación de 70seg.
+%Los parámetros son a=0.07; omega=9; b=5; c=150, 
+%Hallar un controlador para que los polos de lazo cerrado se ubiquen en:
+%p1=-15+15j; p2=-15-15j; p3=-0.5+0.5j, p4=-0.5-0.5j,
+%            para referencias de 100 y -100 metros en altura, 
+%ambas con alturas iniciales de -500 y 500.
+%Proponer un controlador en tiempo DISCRETO en variables de estado para que el proceso evolucione
+%en los rangos de validez del modelo, es decir donde los ángulos y el valor de la acción de control en
+%valor absoluto son menores a la unidad.
+%Asumiendo que no puede medirse el ángulo alfa , pero sí el ángulo y la altura, proponer un esquema
+%que permita lograr el objetivo de control (OBSERVADOR)
+%Establecer el valor del tiempo de muestreo más adecuado para implementar el diseño en un sistema micro-controlado.
+%Determinar el efecto de la no-linealidad en la acción de control, descripta en la Fig. 4, y 
+%verificar cuál es el máximo valor admisible de la no-linealidad
+clc; clear all; close all;
+%Parametros del avion:
+a = 0.07 ;  w = 9 ;  b = 5 ; c = 150 ;  altura_inicial = 500 ;
+
+%Planteo las matrices en tiempo continuo:
+
+                          %variables de estado
+A = [ -a      a    0    0;  % x1 --> alpha: trayectoria de vuelo con la horizontal/si alpha>0 sube;si alpha<0 desciende 
+       0      0    1    0;  % x2 -->   phi: ángulo de cabeceo [rad]
+      w^2   -w^2   0    0;  % x3 --> phi_p: derivada del angulo  
+      c       0    0    0;]; % x4 -->altura
+
+  
+B = [  0  ;   0  ; b*(w^2) ; 0];
+
+
+                        %salidas:
+C = [  0   0   0   1;   % altura
+       0   1   0   0];   % angulo de cabeceo
+   
+ D = [ 0 ]; 
+ %___________________________________________________________________________
+ %Como me piden calcular un tiempo de integracion adecuado empiezo
+ %calculando los autovalores de la matriz A:
+ polos = eig(A);
+ %Utilizaré la parte real del segundo polo para estimar la dinamica más rapida:
+ h = abs((log(0.95))/(real(polos(2))));
+ %Este calculo me da 1.4655 pero para asegurarme de tener un adecuado
+ %periodo de muestreo que me garantice la estabilidad en el sistema discreto voy
+ %a elegir un valor mucho mas pequeño y asegurarme la estabilidad:
+ h=1e-2;
+ %___________________________________________________________________________
+ %Como la consigna me establece un Tiempo Total de simulacion de 70
+ %segundos entonces ya no hace falta calcular la dinamica mas lenta
+ TT=70;
+ %____________________________________________________________________________
+ %Como me piden un controlador de tiempo discreto debo "traducir" mi
+ %espacio de estados de tiempo continuo a tiempo discreto,
+ %Primero conformo mi espacio de estado y lo denomino F:
+ F = ss(A,B,C,D);
+ %____________________________________________________________________________
+ %Con estos datos puedo convertir mi sistema continuo a discreto:
+ Fd = c2d(F,h,'zoh');
+ %___________________________________________________________________________
+ %Una vez que existe mi sistema discreto puedo extraer las 4 matrices:
+ Ad = Fd.a;
+ Bd = Fd.b;
+ Cd = Fd.c;
+ Dd = Fd.d;
+ %__________________________________________________________________________
+ %Una vez que tengo mis matrices en tiempo discreto debo hacer la matriz
+ %ampliada porque mi referencia es distinta de cero:
+ Aa = [        Ad      zeros(4,1)
+        -Cd(1,:)*Ad     eye(1)    ];
+    
+ Ba = [          Bd   ;
+           -Cd(1,:)*Bd];   
+ %___________________________________________________________________________
+ %PRUEBA DE CONTROLABILIDAD:
+ %Planteo la matriz de controlabilidad:
+ M = [Ba  Aa*Ba  (Aa^2)*Ba  (Aa^3)*Ba   (Aa^4)*Ba];
+ %%Calculo el rango de la matriz para saber si es de rango pleno:
+ rank(M);
+ %Y efectivamente es una matriz cuadrada de 5x5 que tiene rango=5
+ %Si cumple la controlabilidad tambien cumple la alcanzabilidad
+ %___________________________________________________________________________
+ %PREPARO EL CONTROLADOR:
+ % Conformo el polinomio caracteristico (que es la matriz del sistema a 
+ % lazo abierto) con los autovalores de la matriz Aa
+ % para luego con sus coeficientes (que llamaré co) formar la matriz W:
+ co = poly(Aa);
+ %Lo cual me produce los coeficientes:
+ 
+ co(5);
+ co(4);
+ co(3);
+ co(2);
+ %          co(2)      co(3)    co(4)      co(5)
+ %1.0000   -4.9912    9.9729   -9.9715    4.9891   -0.9993
+ 
+ W = [ co(5)   co(4)   co(3)   co(2)    1 ;
+       co(4)   co(3)   co(2)    1       0 ;
+       co(3)   co(2)    1       0       0 ;
+       co(2)    1       0       0       0 ;
+        1       0       0       0       0 ];
+    
+% Y asi conformo mi matriz de transformacion T :    
+T = M*W;
+%__________________________________________________________________________
+%Los polos de tiempo continuo en el plano S que me ordena la consigna son:
+p1 =  -15 + 15*i;
+p2 =  -15 - 15*i;
+p3 = -0.5 + 0.5*i;
+p4= -0.5 - 0.5*i;
+p5 = -1;  %este polo adicional le corresponde al integrador
+%___________________________________________________________________________
+% Estos polos de tiempo continuo los debo pasar a tiempo discreto:
+% (utilizo el comando exp(multiplico por el periodo de muestreo))
+polosD = exp([ p1  p2  p3  p4  p5 ]*h);
+
+%0.8510 + 0.1286i  
+%0.8510 - 0.1286i 
+%0.9950 + 0.0050i 
+%0.9950 - 0.0050i 
+%0.9900 + 0.0000i
+
+% Ahora polosD es un vector que contiene los polos discretos resultantes
+% de aplicar la transformación exponencial a los polos continuos
+
+% Luego con estos polos discretos voy a generar los coeficientes del
+% polinomio caracteristico
+
+coef = poly(polosD);
+
+%Obtengo los coeficientes del polinomio:  
+%1.0000   -4.6821    8.7734   -8.2265    3.8614   -0.7261
+
+dif_coef = coef(2:end) - co(2:end);
+invertir_vector = fliplr(dif_coef);
+K = invertir_vector*inv(T);    
+% Obtengo el vector K:
+% 27.6757    0.8828    0.0720    0.1384   -0.0005
+Ki = -K(end);
+K  = K(1:4);
+%__________________________________________________________________________
+%AHORA PLANTEO LA FORMA CANONICA OBSERVABLE:  ( SISTEMA DUAL )
+Ao = Ad';
+Bo = Cd';
+Co = Bd';
+%__________________________________________________________________________
+%Propongo un controlador en tiempo discreto en variables de estado:
+%Implemento el controlador LQR para mayor eficiencia
+%do = [1 1 1 1]; %alpha - phi - phi_p - altura
+%do = [1 1000 1 1000]; %alpha - phi - phi_p - altura
+%do = [1 1e4 1 1e4]; %alpha - phi - phi_p - altura
+%do = [1 1e5 1 1e5]; %alpha - phi - phi_p - altura
+%do = [1 1e6 1 1e6]; %alpha - phi - phi_p - altura
+do = [1 1e7 1 1e7]; %alpha - phi - phi_p - altura
+ 
+ 
+Qo = diag(do);
+
+%Ro = diag([1 1]);
+%Ro = diag([0.01  0.01]);
+%Ro = diag([1e-3  1e-3]);
+%Ro = diag([1e-4  1e-4]);
+%Ro = diag([1e-5  1e-5]);
+ Ro = diag([1e-6  1e-6]);
+ 
+Ko = dlqr(Ao, Bo, Qo, Ro)';
+%__________________________________________________________________________
+%SIMULACIÓN
+% TT = 70;         %Tiempo Total de la simulacion definida arriba
+Ti = 0.001;        %Tiempo de Integración Euler elegido por el diseñador
+np = ceil(TT/Ti);  %Numero de puntos para la simulacion
+zona_muerta = 0.5;
+%__________________________________________________________________________
+%Construyo las variables de estado como vectores:
+t       = 0 : Ti : TT ;
+u       = zeros(1, np+1);
+alpha   = zeros(1, np+1);
+phi     = zeros(1, np+1);
+phi_p   = zeros(1, np+1);
+altura  = zeros(1, np+1);
+%__________________________________________________________________________
+%CONDICIONES INICIALES
+alpha(1) = 0;
+phi(1) = 0;
+phi_p(1) = 0;
+altura(1) = 500;
+x = [alpha(1) phi(1) phi_p(1) altura(1)]';
+x_obs = [0 0 0 0]';
+ref = 100;
+epsilon = 0;
+
+um = 0;
+%___________________________________________________________________________
+
+for i=1 : np
+    
+    y_obs = Cd*x_obs;
+    y  = Cd*x;
+    
+    epsilon_p =   ref   -  y(1);
+    epsilon   = epsilon +  epsilon_p;
+    
+    %um = -K*x     + Ki*epsilon;     %Sin Observador
+     um = -K*x_obs + Ki*epsilon;     %Con Observador
+    
+     % Zona no-lineal:
+     %  if(abs(um)<zona_muerta)
+     %     um = 0;
+     % else
+     %    um = sign(um)*(abs(um) - deathZone);
+     % end
+     
+    u(i) = um;
+    
+    %SISTEMA
+      epsilon_p = a*(phi(i)   - alpha(i));
+         phi_pp = -w^2*(phi(i)- alpha(i) -b*u(i));
+       altura_p = c*alpha(i);
+     alpha(i+1) = alpha(i)   + Ti*epsilon_p;
+     phi_p(i+1) = phi_p(i)   + Ti*phi_pp;
+       phi(i+1) = phi(i)     + Ti*phi_p(i);
+    altura(i+1) = altura(i)  + Ti*altura_p;
+    
+    x = [alpha(i+1) phi(i+1) phi_p(i+1) altura(i+1)]';
+    
+    
+    x_obs = Ad*x_obs + Bd*u(i)+ Ko*(y - y_obs);
+      
+end
+
+%%
+%GRÁFICAS
+figure(1);
+
+subplot(3,1,1);
+plot ( t , u ); title('Acción de control');      grid on;
+
+subplot(3,1,2);
+plot(t,altura); title('Altura del avión [m]');   grid on;
+
+subplot(3,1,3);
+plot(t, phi)  ; title('Ángulo de Cabeceo [Rad]'); grid on;
