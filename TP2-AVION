@@ -1,3 +1,4 @@
+
 %TRABAJO PRACTICO N° 2
 %Profesor: Julian Pucheta
 %Estudiante: Herman Raymundo Salvatierra
@@ -192,7 +193,9 @@ ref = 100;
 epsilon = 0;
 
 um = 0;
+
 %___________________________________________________________________________
+%Inicio el bucle de Similación:
 
 for i=1 : np
     
@@ -213,8 +216,8 @@ for i=1 : np
      % end
      
     u(i) = um;
-    
-    %SISTEMA
+ %__________________________________________________________________________   
+ %Conformo las variables de estado por integracion de Euler
       epsilon_p = a*(phi(i)   - alpha(i));
          phi_pp = -w^2*(phi(i)- alpha(i) -b*u(i));
        altura_p = c*alpha(i);
@@ -229,8 +232,7 @@ for i=1 : np
     x_obs = Ad*x_obs + Bd*u(i)+ Ko*(y - y_obs);
       
 end
-
-%%
+%__________________________________________________________________________
 %GRÁFICAS
 figure(1);
 
